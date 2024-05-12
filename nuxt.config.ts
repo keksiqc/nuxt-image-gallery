@@ -1,4 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import { defineNuxtConfig } from 'nuxt'
+
 export default defineNuxtConfig({
   modules: [
     '@nuxthub/core',
@@ -9,8 +11,10 @@ export default defineNuxtConfig({
     'nuxt-auth-utils'
   ],
 
-  hub: {
-    blob: true
+  nitro: {
+    storage: {
+      blob: true
+    }
   },
 
   ui: {
@@ -25,10 +29,11 @@ export default defineNuxtConfig({
 
   eslint: {
     config: {
-      stylistic: {
-        quotes: 'single',
-        commaDangle: 'never'
+      rules: {
+        'quotes': ['error', 'single'],
+        'comma-dangle': ['error', 'never']
       }
     }
   }
 })
+
