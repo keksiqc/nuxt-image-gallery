@@ -1,30 +1,20 @@
 <script setup lang="ts">
-const bottomMenu = ref()
+import { ref, computed, watch, onMounted } from 'vue'
+import { useFile, useUserSession, useMediaQuery } from '~/composables'
+import { useState, useRoute, useRouter } from '#imports'
+import { BlobObject } from '~/types'
+import { useImageGallery } from '~/composables/useImageGallery'
+
+const bottomMenu = ref<InstanceType<typeof BottomMenu>>()
 const imageEl = ref<HTMLImageElement>()
 const magnifierEl = ref<HTMLElement>()
 const imageContainer = ref<HTMLElement>()
 const savingImg = ref(false)
 
-// filter
-const filter = ref(false)
-const contrast = ref(100)
-const blur = ref(0)
-const hueRotate = ref(0)
-const invert = ref(0)
-const saturate = ref(100)
-const sepia = ref(0)
-const magnifier = ref(false)
-const zoomFactor = ref(1)
-const objectsFit = ref(['Contain', 'Cover', 'Scale-down', 'Fill', 'None'])
-const objectFitSelected = ref(objectsFit.value[0])
-const filterUpdated = ref(false)
-
 const { images, uploadImage } = useFile()
 const { loggedIn } = useUserSession()
-
 const isSmallScreen = useMediaQuery('(max-width: 1024px)')
 const { currentIndex, isFirstImg, isLastImg, downloadImage, applyFilters, initSwipe, convertBase64ToFile, magnifierImage } = useImageGallery()
-
 const active = useState()
 const route = useRoute()
 const router = useRouter()
@@ -180,6 +170,7 @@ onMounted(() => {
       <div class="h-full w-full max-w-7xl flex items-center justify-center relative mx-auto">
         <!-- Bottom menu -->
         <BottomMenu
+          v-if="image"
           ref="bottomMenu"
           class="bottom-menu"
           :class="{ 'right-[350px]': filter }"
@@ -340,6 +331,7 @@ onMounted(() => {
                   <img
                     v-if="image"
                     ref="imageEl"
+                    :key="image.pathname"
                     :src="`/images/${image.pathname}`"
                     :alt="image.pathname"
                     class="rounded object-contain transition-all duration-200 block"
