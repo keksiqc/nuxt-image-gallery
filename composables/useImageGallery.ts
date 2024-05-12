@@ -1,15 +1,34 @@
 import type { UseSwipeDirection } from '@vueuse/core'
+import { computed, ref, ComputedRef } from 'vue'
+import { useNuxtApp } from '#app'
+import { useRuntimeConfig } from '#app'
+import { useSwipe } from '@vueuse/core'
+import { useRouter, useRoute } from '#nuxt'
 
 export function useImageGallery() {
   const nuxtApp = useNuxtApp()
   const config = useRuntimeConfig()
-  const imageToDownload = ref<HTMLImageElement>()
+  const imageToDownload = ref<HTMLImageElement | null>(null)
   const router = useRouter()
   const route = useRoute()
 
-  const currentIndex: ComputedRef<number> = computed(() => nuxtApp.$file.images.value!.findIndex((image: BlobObject) => image.pathname.split('.')[0] === route.params.slug[0]))
-  const isFirstImg: ComputedRef<boolean> = computed(() => nuxtApp.$file.images.value![0].pathname.split('.')[0] === route.params.slug[0])
-  const isLastImg: ComputedRef<boolean> = computed(() => nuxtApp.$file.images.value![nuxtApp.$file.images.value!.length - 1].pathname.split('.')[0] === route.params.slug[0])
+  const currentIndex = computed(() => {
+    const images = nuxtApp.$file.images.value!
+    const slug = route.params.slug[0]
+    return images.findIndex((image: BlobObject) => image.pathname.split('.')[0] === slug)
+  })
+
+  const isFirstImg = computed(() => {
+    const firstImage = nuxtApp.$file.images.value![0]
+    const slug = route.params.slug[0]
+    return firstImage.pathname.split('.')[0] === slug
+  })
+
+  const isLastImg = computed(() => {
+    const lastImage = nuxtApp.$file.images.value![nuxtApp.$file.images.value!.length - 1]
+    const slug = route.params.slug[0]
+    return lastImage.pathname.split('.')[0] === slug
+  })
 
   const initSwipe = (el: Ref<HTMLElement | null>) => {
     useSwipe(el, {
@@ -36,13 +55,17 @@ export function useImageGallery() {
     const canvas: HTMLCanvasElement = document.createElement('canvas')
     const context: CanvasRenderingContext2D | null = canvas.getContext('2d')
 
+    if (!context) {
+      throw new Error('Canvas context is not available')
+    }
+
     canvas.width = poster?.naturalWidth
     canvas.height = poster?.naturalHeight
 
-    context!.filter = `contrast(${contrast}%) blur(${blur}px) invert(${invert}%)
+    context.filter = `contrast(${contrast}%) blur(${blur}px) invert(${invert}%)
       saturate(${saturate}%) hue-rotate(${hueRotate}deg) sepia(${sepia}%)`
 
-    context!.drawImage(poster!, 0, 0, canvas.width, canvas.height)
+    context.drawImage(poster!, 0, 0, canvas.width, canvas.height)
 
     const modifiedImage = new Image()
 
@@ -56,29 +79,42 @@ export function useImageGallery() {
     if (!imageToDownload.value) {
       return
     }
-    await applyFilters(poster, contrast, blur, invert, saturate, hueRotate, sepia)
+    try {
+      await applyFilters(poster, contrast, blur, invert, saturate, hueRotate, sepia)
 
-    await useFetch(imageToDownload.value.src, {
-      baseURL: `${config.public.imageApi}/ipx/_/tmdb/`
-    }).then((response) => {
-      const blob = response.data.value as Blob
-      const url: string = URL.createObjectURL(blob)
-      const link: HTMLAnchorElement = document.createElement('a')
+      const response = await fetch(imageToDownload.value.src)
+      if (!response.ok) {
+        throw new Error('Failed to fetch image')
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
 
       link.setAttribute('href', url)
       link.setAttribute('download', filename)
       link.click()
-    })
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   const convertBase64ToFile = async (image: Ref<HTMLImageElement>, originalImage: Ref<BlobObject>) => {
     const url = image.value.currentSrc
 
-    const response = await fetch(url)
-    const blob = await response.blob()
-    const convertedFile = new File([blob], originalImage.value.pathname.split('.')[1], { type: `image/${originalImage.value.pathname.split('.')[1]}` })
+    try {
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error('Failed to fetch image')
+      }
 
-    return convertedFile
+      const blob = await response.blob()
+      const convertedFile = new File([blob], originalImage.value.pathname.split('.')[1], { type: `image/${originalImage.value.pathname.split('.')[1]}` })
+
+      return convertedFile
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   const magnifierImage = (e: MouseEvent, containerEl: HTMLElement, imageEl: HTMLImageElement, magnifierEl: HTMLElement, zoomFactor: number = 2) => {
@@ -123,5 +159,10 @@ export function useImageGallery() {
     currentIndex,
     isFirstImg,
     isLastImg
-  }
+  } as const
+}
+
+
+interface BlobObject {
+  pathname: string
 }
