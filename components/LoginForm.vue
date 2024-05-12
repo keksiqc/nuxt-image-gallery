@@ -1,30 +1,46 @@
 <script setup lang="ts">
-const emit = defineEmits(['closeLogin'])
-const { fetch: refreshSession } = useUserSession()
-const password = ref('')
-const loading = ref(false)
+import { ref } from 'vue'
+import { useUserSession } from '@/composables/useUserSession'
+import { useToast } from 'vue-toastification'
+import { defineEmits, defineProps } from 'vue'
 
+const emit = defineEmits<{
+  (e: 'closeLogin'): void
+}>()
+
+const props = defineProps<{
+  modelValue: string
+}>()
+
+const password = ref(props.modelValue)
+const loading = ref(false)
+const { fetch: refreshSession } = useUserSession()
 const toast = useToast()
 
+function clearPassword() {
+  password.value = ''
+}
+
 async function login() {
-  if (loading.value || !password.value) return
+  if (loading.value || !password.value.trim()) return
   loading.value = true
-  await $fetch('/api/auth', {
-    method: 'POST',
-    body: { password: password.value }
-  })
-    .then(async () => {
-      await refreshSession()
-      emit('closeLogin')
+  try {
+    await $fetch('/api/auth', {
+      method: 'POST',
+      body: { password: password.value }
     })
-    .catch((err) => {
-      toast.add({
-        title: `Error ${err.statusCode}`,
-        description: `${err.data?.message || err.message}. Please try again`,
-        color: 'red'
-      })
+    await refreshSession()
+    clearPassword()
+    emit('closeLogin')
+  } catch (err: any) {
+    toast.add({
+      title: `Error ${err.statusCode || 500}`,
+      description: err.data?.message || err.message || 'An unexpected error occurred. Please try again.',
+      color: 'red'
     })
-  loading.value = false
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -52,7 +68,7 @@ async function login() {
       variant="ghost"
       class="px-4"
       size="lg"
-      :disabled="!password"
+      :disabled="!password.trim()"
     />
   </form>
 </template>
