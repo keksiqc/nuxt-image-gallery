@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, useState } from 'vue'
+-import { ref, useState } from 'vue'
++import { ref } from 'vue'
 import type { BlobObject } from '~/types'
 
 // UI state
