@@ -1,54 +1,106 @@
 <script setup lang="ts">
-const isOpen = ref(false)
+-import { ref, useState } from 'vue'
++import { ref } from 'vue'
+import type { BlobObject } from '~/types'
 
-const dropZoneRef = ref<HTMLElement>()
-const fileInput = ref<HTMLInputElement>()
-const mansoryItem = ref<Array<HTMLElement>>([])
+// UI state
+const isOpen = ref(false)
 const deletingImg = ref('')
 const uploadingImg = ref(false)
 const disconnect = ref(false)
 
+// DOM references
+const dropZoneRef = ref<HTMLElement>()
+const fileInput = ref<HTMLInputElement>()
+const mansoryItem = ref<Array<HTMLElement>>([])
+
+// Composables
 const toast = useToast()
 const { uploadImage, deleteImage, images } = useFile()
 const { loggedIn, clear } = useUserSession()
+const { getImageId } = useImageGallery()
 
-const active = useState()
+// Active image state for transitions
+const active = useState<string>('activeImage', () => '')
 
+// Drop zone handling
 const { isOverDropZone } = useDropZone(dropZoneRef, onDrop)
 
-function openFilePicker() {
+/**
+ * Open the file picker dialog
+ */
+function openFilePicker(): void {
   fileInput.value?.click()
 }
 
-async function fileSelection(event: Event) {
+/**
+ * Handle file selection from input
+ */
+async function fileSelection(event: Event): Promise<void> {
   const target = event.target as HTMLInputElement
-  target.files?.[0] && await uploadFile(target.files[0])
+  if (target.files?.[0]) {
+    await uploadFile(target.files[0])
+  }
 }
 
-async function onDrop(files: File[] | null) {
-  files && await uploadFile(files[0])
+/**
+ * Handle files dropped on the drop zone
+ */
+async function onDrop(files: File[] | null): Promise<void> {
+  if (files?.length) {
+    await uploadFile(files[0])
+  }
 }
 
-async function uploadFile(file: File) {
+/**
+ * Upload a file to the server
+ */
+async function uploadFile(file: File): Promise<void> {
   uploadingImg.value = true
 
-  await uploadImage(file)
-    .catch(() => toast.add({ title: 'An error occured', description: 'Please try again', color: 'red' }))
-    .finally(() => uploadingImg.value = false)
+  try {
+    await uploadImage(file)
+  } catch (error) {
+    toast.add({ 
+      title: 'Upload failed', 
+      description: 'Please try again', 
+      color: 'red' 
+    })
+  } finally {
+    uploadingImg.value = false
+  }
 }
 
-async function deleteFile(pathname: string) {
+/**
+ * Delete an image from the server
+ */
+async function deleteFile(pathname: string): Promise<void> {
   deletingImg.value = pathname
 
-  await deleteImage(pathname)
-    .catch(() => toast.add({ title: 'An error occured', description: 'Please try again', color: 'red' }))
-    .finally(() => deletingImg.value = '')
+  try {
+    await deleteImage(pathname)
+  } catch (error) {
+    toast.add({ 
+      title: 'Delete failed', 
+      description: 'Please try again', 
+      color: 'red' 
+    })
+  } finally {
+    deletingImg.value = ''
+  }
 }
 
-async function clearSession() {
+/**
+ * Log out the current user
+ */
+async function clearSession(): Promise<void> {
   disconnect.value = true
-
-  await clear().finally(() => disconnect.value = false)
+  
+  try {
+    await clear()
+  } finally {
+    disconnect.value = false
+  }
 }
 </script>
 
@@ -174,15 +226,15 @@ async function clearSession() {
               @click="deleteFile(image.pathname)"
             />
             <NuxtLink
-              :to="`/detail/${image.pathname.split('.')[0]}`"
-              @click="active = image.pathname.split('.')[0]"
+              :to="`/detail/${getImageId(image.pathname)}`"
+              @click="active = getImageId(image.pathname)"
             >
               <img
                 v-if="image"
                 width="527"
                 height="430"
                 :src="`/images/${image.pathname}`"
-                :class="{ imageEl: image.pathname.split('.')[0] === active }"
+                :class="{ imageEl: getImageId(image.pathname) === active }"
                 class="h-auto w-full max-h-[430px] rounded-md transition-all duration-200 border-image brightness-[.8] hover:brightness-100 will-change-[filter] object-cover"
               >
             </NuxtLink>

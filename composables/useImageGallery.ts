@@ -1,92 +1,150 @@
 import type { UseSwipeDirection } from '@vueuse/core'
-import { computed, ref, ComputedRef } from 'vue'
-import { useNuxtApp } from '#app'
-import { useRuntimeConfig } from '#app'
+import { computed, ref, type Ref } from 'vue'
 import { useSwipe } from '@vueuse/core'
-import { useRouter, useRoute } from '#nuxt'
+import type { BlobObject, ImageFilter } from '~/types'
 
 export function useImageGallery() {
   const nuxtApp = useNuxtApp()
-  const config = useRuntimeConfig()
   const imageToDownload = ref<HTMLImageElement | null>(null)
   const router = useRouter()
   const route = useRoute()
 
+  // Get the current image slug from the route
+  const currentSlug = computed(() => route.params.slug?.[0] || '')
+
+  // Get all images from the file plugin
+  const images = computed(() => nuxtApp.$file.images.value || [])
+
+  // Find the current index of the displayed image
   const currentIndex = computed(() => {
-    const images = nuxtApp.$file.images.value!
-    const slug = route.params.slug[0]
-    return images.findIndex((image: BlobObject) => image.pathname.split('.')[0] === slug)
+    return images.value.findIndex((image: BlobObject) => 
+      getImageId(image.pathname) === currentSlug.value
+    )
   })
 
+  // Check if we're viewing the first image
   const isFirstImg = computed(() => {
-    const firstImage = nuxtApp.$file.images.value![0]
-    const slug = route.params.slug[0]
-    return firstImage.pathname.split('.')[0] === slug
+    if (!images.value.length) return false
+    return currentIndex.value === 0
   })
 
+  // Check if we're viewing the last image
   const isLastImg = computed(() => {
-    const lastImage = nuxtApp.$file.images.value![nuxtApp.$file.images.value!.length - 1]
-    const slug = route.params.slug[0]
-    return lastImage.pathname.split('.')[0] === slug
+    if (!images.value.length) return false
+    return currentIndex.value === images.value.length - 1
   })
 
+  /**
+   * Get the image ID from pathname (removes file extension)
+   */
+  function getImageId(pathname: string): string {
+    return pathname.split('.')[0]
+  }
+
+  /**
+   * Navigate to the next or previous image
+   */
+  function navigateImage(direction: 'next' | 'prev'): void {
+    if (direction === 'next') {
+      if (isLastImg.value) {
+        router.push('/')
+      } else {
+        const nextImage = images.value[currentIndex.value + 1]
+        router.push(`/detail/${getImageId(nextImage.pathname)}`)
+      }
+    } else {
+      if (isFirstImg.value) {
+        router.push('/')
+      } else {
+        const prevImage = images.value[currentIndex.value - 1]
+        router.push(`/detail/${getImageId(prevImage.pathname)}`)
+      }
+    }
+  }
+
+  /**
+   * Initialize swipe gestures for mobile navigation
+   */
   const initSwipe = (el: Ref<HTMLElement | null>) => {
     useSwipe(el, {
       passive: false,
-
-      onSwipeEnd(e: TouchEvent, direction: UseSwipeDirection) {
+      onSwipeEnd(_: TouchEvent, direction: UseSwipeDirection) {
         if (direction === 'left') {
-          if (isLastImg.value)
-            router.push('/')
-          else
-            router.push(`/detail/${nuxtApp.$file.images.value![currentIndex.value + 1].pathname.split('.')[0]}`)
-        }
-        else {
-          if (isFirstImg.value)
-            router.push('/')
-          else
-            router.push(`/detail/${nuxtApp.$file.images.value![currentIndex.value - 1].pathname.split('.')[0]}`)
+          navigateImage('next')
+        } else {
+          navigateImage('prev')
         }
       }
     })
   }
 
-  const applyFilters = async (poster: HTMLImageElement, contrast: number, blur: number, invert: number, saturate: number, hueRotate: number, sepia: number) => {
-    const canvas: HTMLCanvasElement = document.createElement('canvas')
-    const context: CanvasRenderingContext2D | null = canvas.getContext('2d')
+  /**
+   * Apply filters to an image and return the modified image
+   */
+  const applyFilters = async (
+    image: HTMLImageElement, 
+    contrast: number, 
+    blur: number, 
+    invert: number, 
+    saturate: number, 
+    hueRotate: number, 
+    sepia: number
+  ) => {
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
 
     if (!context) {
       throw new Error('Canvas context is not available')
     }
 
-    canvas.width = poster?.naturalWidth
-    canvas.height = poster?.naturalHeight
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
 
+    // Apply filters to the canvas context
     context.filter = `contrast(${contrast}%) blur(${blur}px) invert(${invert}%)
       saturate(${saturate}%) hue-rotate(${hueRotate}deg) sepia(${sepia}%)`
 
-    context.drawImage(poster!, 0, 0, canvas.width, canvas.height)
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
 
+    // Create a new image with the filtered result
     const modifiedImage = new Image()
-
     modifiedImage.src = canvas.toDataURL('image/png')
     imageToDownload.value = modifiedImage
 
     return imageToDownload
   }
 
-  const downloadImage = async (filename: string, poster: HTMLImageElement, contrast: number, blur: number, invert: number, saturate: number, hueRotate: number, sepia: number) => {
-    if (!imageToDownload.value) {
-      return
-    }
+  /**
+   * Download an image with applied filters
+   */
+  const downloadImage = async (
+    filename: string, 
+    image: HTMLImageElement, 
+    filters: ImageFilter
+  ) => {
     try {
-      await applyFilters(poster, contrast, blur, invert, saturate, hueRotate, sepia)
+      // Apply filters to the image
+      await applyFilters(
+        image, 
+        filters.contrast, 
+        filters.blur, 
+        filters.invert, 
+        filters.saturate, 
+        filters.hueRotate, 
+        filters.sepia
+      )
 
+      if (!imageToDownload.value) {
+        throw new Error('Failed to process image')
+      }
+
+      // Fetch the modified image data
       const response = await fetch(imageToDownload.value.src)
       if (!response.ok) {
         throw new Error('Failed to fetch image')
       }
 
+      // Create a download link
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -94,33 +152,59 @@ export function useImageGallery() {
       link.setAttribute('href', url)
       link.setAttribute('download', filename)
       link.click()
+
+      // Clean up
+      URL.revokeObjectURL(url)
     } catch (error) {
-      console.error(error)
+      console.error('Error downloading image:', error)
     }
   }
 
-  const convertBase64ToFile = async (image: Ref<HTMLImageElement>, originalImage: Ref<BlobObject>) => {
-    const url = image.value.currentSrc
-
+  /**
+   * Convert a base64 image to a File object
+   */
+  const convertBase64ToFile = async (
+    image: Ref<HTMLImageElement>, 
+    originalImage: { value: BlobObject }
+  ) => {
     try {
+      const url = image.value.src
       const response = await fetch(url)
+      
       if (!response.ok) {
         throw new Error('Failed to fetch image')
       }
 
       const blob = await response.blob()
-      const convertedFile = new File([blob], originalImage.value.pathname.split('.')[1], { type: `image/${originalImage.value.pathname.split('.')[1]}` })
-
-      return convertedFile
+      const fileExtension = originalImage.value.pathname.split('.').pop() || 'png'
+      
+      return new File(
+        [blob], 
+        originalImage.value.pathname, 
+        { type: `image/${fileExtension}` }
+      )
     } catch (error) {
-      console.error(error)
+      console.error('Error converting image:', error)
+      throw error
     }
   }
 
-  const magnifierImage = (e: MouseEvent, containerEl: HTMLElement, imageEl: HTMLImageElement, magnifierEl: HTMLElement, zoomFactor: number = 2) => {
-    if (magnifierEl.style.filter !== imageEl.style.filter)
+  /**
+   * Create a magnifier effect on an image
+   */
+  const magnifierImage = (
+    e: MouseEvent, 
+    containerEl: HTMLElement, 
+    imageEl: HTMLImageElement, 
+    magnifierEl: HTMLElement, 
+    zoomFactor: number = 2
+  ) => {
+    // Sync filters between the image and magnifier
+    if (magnifierEl.style.filter !== imageEl.style.filter) {
       magnifierEl.style.filter = imageEl.style.filter
+    }
 
+    // Calculate positions
     const imageRect = imageEl.getBoundingClientRect()
     const containerRect = containerEl.getBoundingClientRect()
 
@@ -130,18 +214,20 @@ export function useImageGallery() {
     const imgWidth = imageRect.width
     const imgHeight = imageRect.height
 
-    const zoomedWidth = imgWidth * (zoomFactor === 1 ? 1.5 : zoomFactor)
-    const zoomedHeight = imgHeight * (zoomFactor === 1 ? 1.5 : zoomFactor)
+    // Calculate zoom
+    const effectiveZoomFactor = zoomFactor === 1 ? 1.5 : zoomFactor
+    const zoomedWidth = imgWidth * effectiveZoomFactor
+    const zoomedHeight = imgHeight * effectiveZoomFactor
 
+    // Calculate percentages for positioning
     let xperc = (x / imgWidth) * 100
     let yperc = (y / imgHeight) * 100
 
-    if (x > 0.01 * imgWidth)
-      xperc += 0.15 * xperc
+    // Adjust percentages for better positioning
+    if (x > 0.01 * imgWidth) xperc += 0.15 * xperc
+    if (y >= 0.01 * imgHeight) yperc += 0.15 * yperc
 
-    if (y >= 0.01 * imgHeight)
-      yperc += 0.15 * yperc
-
+    // Apply styles to the magnifier
     magnifierEl.style.backgroundSize = `${zoomedWidth}px ${zoomedHeight}px`
     magnifierEl.style.backgroundPositionX = `${xperc - 9}%`
     magnifierEl.style.backgroundPositionY = `${yperc - 9}%`
@@ -156,13 +242,12 @@ export function useImageGallery() {
     convertBase64ToFile,
     magnifierImage,
     initSwipe,
+    navigateImage,
+    getImageId,
     currentIndex,
     isFirstImg,
-    isLastImg
-  } as const
-}
-
-
-interface BlobObject {
-  pathname: string
+    isLastImg,
+    images,
+    currentSlug
+  }
 }

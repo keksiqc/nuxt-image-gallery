@@ -1,80 +1,116 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { useFile, useUserSession, useMediaQuery } from '~/composables'
-import { useState, useRoute, useRouter } from '#imports'
-import { BlobObject } from '~/types'
-import { useImageGallery } from '~/composables/useImageGallery'
+import { useState } from '#imports'
+import type { BlobObject } from '~/types'
 
+// DOM references
 const bottomMenu = ref<InstanceType<typeof BottomMenu>>()
 const imageEl = ref<HTMLImageElement>()
 const magnifierEl = ref<HTMLElement>()
 const imageContainer = ref<HTMLElement>()
 const savingImg = ref(false)
 
+// Composables
 const { images, uploadImage } = useFile()
 const { loggedIn } = useUserSession()
 const isSmallScreen = useMediaQuery('(max-width: 1024px)')
-const { currentIndex, isFirstImg, isLastImg, downloadImage, applyFilters, initSwipe, convertBase64ToFile, magnifierImage } = useImageGallery()
-const active = useState()
+const { 
+  currentIndex, 
+  isFirstImg, 
+  isLastImg, 
+  downloadImage, 
+  applyFilters, 
+  initSwipe, 
+  convertBase64ToFile, 
+  magnifierImage,
+  navigateImage,
+  getImageId,
+  currentSlug
+} = useImageGallery()
+
+const {
+  contrast,
+  blur,
+  invert,
+  saturate,
+  hueRotate,
+  sepia,
+  filterUpdated,
+  magnifier,
+  zoomFactor,
+  filter,
+  objectsFit,
+  objectFitSelected,
+  resetFilters,
+  cancelFilters,
+  getCurrentFilters
+} = useImageFilters()
+
+// Active image state for transitions
+const active = useState<string>('activeImage', () => '')
 const route = useRoute()
 const router = useRouter()
 
-const image = computed(() => {
-  return images.value!.filter((file: BlobObject) => file.pathname.split('.')[0] === route.params.slug[0])[0]
+// Get the current image from the route slug
+const image = computed<BlobObject | undefined>(() => {
+  if (!images.value?.length || !route.params.slug?.[0]) return undefined
+  
+  return images.value.find(
+    (file: BlobObject) => getImageId(file.pathname) === route.params.slug[0]
+  )
 })
 
+// Keyboard navigation
 onKeyStroke('Escape', () => {
   router.push('/')
 })
 
 onKeyStroke('ArrowLeft', () => {
-  if (isFirstImg.value)
-    router.push('/')
-  else
-    router.push(`/detail/${images.value![currentIndex.value - 1].pathname.split('.')[0]}`)
+  navigateImage('prev')
 })
 
 onKeyStroke('ArrowRight', () => {
-  if (isLastImg.value)
-    router.push('/')
-  else
-    router.push(`/detail/${images.value![currentIndex.value + 1].pathname.split('.')[0]}`)
+  navigateImage('next')
 })
 
-function resetFilter() {
-  contrast.value = 100
-  blur.value = 0
-  invert.value = 0
-  saturate.value = 100
-  hueRotate.value = 0
-  sepia.value = 0
-  filterUpdated.value = false
-  magnifier.value = false
-  zoomFactor.value = 1
-}
-
-function cancelFilter() {
-  filter.value = false
-
-  resetFilter()
-}
-
+/**
+ * Save the image with applied filters
+ */
 async function saveImage() {
-  if (filterUpdated.value && imageEl.value) {
-    savingImg.value = true
+  if (!filterUpdated.value || !imageEl.value || !image.value) return
+  
+  savingImg.value = true
 
-    const modifiedImage = await applyFilters(imageEl.value, contrast.value, blur.value, invert.value, saturate.value, hueRotate.value, sepia.value)
+  try {
+    // Apply filters to the image
+    const modifiedImage = await applyFilters(
+      imageEl.value, 
+      contrast.value, 
+      blur.value, 
+      invert.value, 
+      saturate.value, 
+      hueRotate.value, 
+      sepia.value
+    )
 
-    const imageToUpload = await convertBase64ToFile(modifiedImage, image)
+    // Convert the modified image to a file
+    const imageToUpload = await convertBase64ToFile(modifiedImage, { value: image.value })
 
-    await uploadImage(imageToUpload, true).finally(() => savingImg.value = false)
+    // Upload the modified image
+    await uploadImage(imageToUpload, true)
+  } catch (error) {
+    console.error('Failed to save image:', error)
+  } finally {
+    savingImg.value = false
   }
 }
 
+// Watch for filter changes
 watch([contrast, blur, invert, saturate, hueRotate, sepia], () => {
   filterUpdated.value = true
 })
 
+// Initialize swipe navigation on mount
 onMounted(() => {
   initSwipe(imageEl)
 })
@@ -95,7 +131,7 @@ onMounted(() => {
       <ImageFilters
         class="absolute md:mt-36 transition-transform duration-200"
         :class="filter ? 'translate-x-0 right-8 ' : 'translate-x-full right-0'"
-        @reset-filter="resetFilter"
+        @reset-filter="resetFilters"
         @close-filter="filter = false"
       >
         <div
@@ -237,7 +273,7 @@ onMounted(() => {
                     size="md"
                     class="hidden md:flex"
                     aria-label="Download original or modified image"
-                    @click="downloadImage(image.pathname, imageEl, contrast, blur, invert, saturate, hueRotate, sepia)"
+                    @click="downloadImage(image.pathname, imageEl, getCurrentFilters())"
                   />
                 </UTooltip>
               </div>
@@ -267,7 +303,7 @@ onMounted(() => {
                     icon="i-heroicons-x-mark"
                     class="hidden md:flex"
                     aria-label="Upload original or modified image to gallery"
-                    @click="cancelFilter()"
+                    @click="cancelFilters()"
                   />
                 </UTooltip>
               </div>
