@@ -1,24 +1,31 @@
-import { ref, Ref } from '@vue/composition-api'
-import { useFetch, useRouter, useToast } from 'nuxt-composition-api'
+import { ref } from 'vue'
+import type { BlobObject } from '~/types'
 
-export default defineNuxtPlugin(({ Vue }) => {
-  const images: Ref<File[]> = ref([])
+export default defineNuxtPlugin(() => {
+  const images = ref<BlobObject[]>([])
   const router = useRouter()
   const toast = useToast()
 
   const getImages = async () => {
-    const { data: files } = await useFetch<File[]>('/api/images')
-
-    images.value = files.value
+    try {
+      const files = await $fetch<BlobObject[]>('/api/images')
+      images.value = files
+    } catch (error) {
+      console.error('Failed to fetch images:', error)
+      toast.add({
+        color: 'red',
+        title: 'Failed to fetch images',
+        description: error instanceof Error ? error.message : 'Unknown error'
+      })
+    }
   }
 
-  onBeforeMount(getImages)
+  // Initialize images on plugin load
+  getImages()
 
-  async function uploadImage(event: Event, image: File, filter: boolean = false) {
-    event.preventDefault()
-
+  async function uploadImage(file: File, filter: boolean = false) {
     const formData = new FormData()
-    formData.append('image', image)
+    formData.append('image', file)
 
     try {
       await $fetch('/api/images/upload', {
@@ -26,44 +33,54 @@ export default defineNuxtPlugin(({ Vue }) => {
         body: formData
       })
 
-      getImages()
+      await getImages()
 
       if (filter) {
         router.push('/')
       }
-    } catch (err) {
+      
+      return true
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       toast.add({
         color: 'red',
         title: 'Failed to upload image',
-        description: err.data?.message || err.message
+        description: errorMessage
       })
+      return false
     }
   }
 
   async function deleteImage(pathname: string) {
-    const image = images.value.find(image => image.path === pathname)
+    const image = images.value.find(image => image.pathname === pathname)
 
     if (!image) {
-      return
+      return false
     }
 
     try {
       await $fetch(`/api/images/${pathname}`, { method: 'DELETE' })
-
-      images.value = images.value.filter(image => image.path !== pathname)
-    } catch (err) {
+      images.value = images.value.filter(image => image.pathname !== pathname)
+      return true
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       toast.add({
         color: 'red',
         title: 'Failed to delete image',
-        description: err.data?.message || err.message
+        description: errorMessage
       })
+      return false
     }
   }
 
-  Vue.provide('file', {
-    getImages,
-    images,
-    uploadImage,
-    deleteImage
-  })
+  return {
+    provide: {
+      file: {
+        getImages,
+        images,
+        uploadImage,
+        deleteImage
+      }
+    }
+  }
 })
