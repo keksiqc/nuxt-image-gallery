@@ -14,24 +14,24 @@
     "logs:preview": "wrangler pages deployment tail --environment preview"
   },
   "dependencies": {
-    "@nuxt/eslint": "^0.3.7",
-    "@nuxt/fonts": "^0.6.1",
-    "@nuxt/ui": "^2.15.2",
-    "@nuxthub/core": "^0.5.5",
-    "@vueuse/core": "^10.9.0",
-    "@vueuse/nuxt": "^10.9.0",
+    "@nuxt/eslint": "^0.7.6",
+    "@nuxt/fonts": "^0.11.4",
+    "@nuxt/ui": "^2.22.3",
+    "@nuxthub/core": "^0.9.0",
+    "@vueuse/core": "^10.11.1",
+    "@vueuse/nuxt": "^10.11.1",
     "nuxt": "^4.1.2",
-    "nuxt-auth-utils": "^0.0.22"
+    "nuxt-auth-utils": "^0.5.25"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^2.14.0",
-    "@iconify-json/simple-icons": "^1.1.99",
-    "@nuxt/devtools": "^1.1.5",
-    "eslint": "^9.0.0",
-    "lint-staged": "^15.2.2",
-    "simple-git-hooks": "^2.11.1",
-    "typescript": "^5.4.5",
-    "vue-tsc": "^2.0.13",
-    "wrangler": "^3.50.0"
+    "@antfu/eslint-config": "^2.27.3",
+    "@iconify-json/simple-icons": "^1.2.54",
+    "@nuxt/devtools": "^1.7.0",
+    "eslint": "^9.37.0",
+    "lint-staged": "^15.5.2",
+    "simple-git-hooks": "^2.13.1",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^2.2.12",
+    "wrangler": "^3.114.14"
   }
 }
