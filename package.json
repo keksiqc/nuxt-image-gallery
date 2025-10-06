@@ -14,7 +14,7 @@
     "logs:preview": "wrangler pages deployment tail --environment preview"
   },
   "dependencies": {
-    "@nuxt/eslint": "^0.3.7",
+    "@nuxt/eslint": "^1.9.0",
     "@nuxt/fonts": "^0.6.1",
     "@nuxt/ui": "^2.15.2",
     "@nuxthub/core": "^0.5.5",
